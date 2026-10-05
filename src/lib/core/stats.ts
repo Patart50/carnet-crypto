@@ -126,3 +126,38 @@ export function computeStats(positions: readonly Position[], options: StatsOptio
   }
   return [...byQuote.values()].map((a) => a.stats).sort((a, b) => a.quote.localeCompare(b.quote));
 }
+
+export interface EmotionStats {
+  quote: string;
+  /** Émotion notée à l'ouverture ; « Non renseignée » sinon. */
+  emotion: string;
+  closed: number;
+  wins: number;
+  winrate: Dec;
+  realizedNet: Dec;
+}
+
+export const NO_EMOTION = 'Non renseignée';
+
+/**
+ * Positions fermées par émotion notée à l'ouverture, par devise : montre si
+ * les trades pris sous le coup du FOMO ou de la revanche coûtent plus cher.
+ */
+export function statsByEmotion(positions: readonly Position[], states?: ReadonlyMap<string, PositionState>): EmotionStats[] {
+  const map = new Map<string, EmotionStats>();
+  for (const p of positions) {
+    const st = states?.get(p.id) ?? computePosition(p);
+    if (st.status !== 'closed') continue;
+    const opening = st.steps[0]?.event;
+    const emotion = opening?.emotion?.trim() || NO_EMOTION;
+    const quote = p.quote.toUpperCase();
+    const key = `${quote}\u0000${emotion}`;
+    const row = map.get(key) ?? { quote, emotion, closed: 0, wins: 0, winrate: ZERO, realizedNet: ZERO };
+    row.closed++;
+    if (st.realizedNet.gt(0)) row.wins++;
+    row.realizedNet = row.realizedNet.plus(st.realizedNet);
+    row.winrate = new D(row.wins).div(row.closed).mul(100);
+    map.set(key, row);
+  }
+  return [...map.values()].sort((a, b) => a.quote.localeCompare(b.quote) || a.realizedNet.cmp(b.realizedNet));
+}

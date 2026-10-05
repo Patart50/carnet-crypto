@@ -147,7 +147,7 @@ export function computePosition(position: Pick<Position, 'side' | 'events'>): Po
     }
 
     if ((e.kind === 'reduce' || e.kind === 'close') && quantity.gt(st.quantity)) {
-      return fail(e, `Quantité supérieure à la quantité détenue (${st.quantity.toString()}).`);
+      return fail(e, `Quantité supérieure à la quantité détenue (${st.quantity.toString().replace(".", ",")}).`);
     }
 
     st.feesTotal = st.feesTotal.plus(fee);

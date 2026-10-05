@@ -72,3 +72,16 @@ describe('statistiques par devise', () => {
     expect(only.best).toBeNull();
   });
 });
+
+describe('par émotion à l’ouverture', () => {
+  it('positions fermées regroupées, de la plus coûteuse à la plus rentable', async () => {
+    const { statsByEmotion, NO_EMOTION } = await import('./stats');
+    const withEmotion = positions.map((x, i) => (i === 1 ? { ...x, events: x.events.map((e, j) => (j === 0 ? { ...e, emotion: 'FOMO' } : e)) } : x));
+    const rows = statsByEmotion(withEmotion);
+    expect(rows.map((r) => `${r.quote}:${r.emotion}:${r.closed}:${r.realizedNet.toString()}`)).toEqual([
+      'EUR:Non renseignée:1:10',
+      'USDT:FOMO:1:-5',
+      `USDT:${NO_EMOTION}:2:4.6`,
+    ]);
+  });
+});

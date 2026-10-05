@@ -1,4 +1,4 @@
-# Spécification — carnet-crypto v0.1 (J1)
+# Spécification — carnet-crypto v0.2 (J2)
 
 Carnet de trades crypto, 100 % local, en français. Projet frère de [pmpa-crypto](https://github.com/Patart50/pmpa-crypto), [dca-crypto](https://github.com/Patart50/dca-crypto) et [renfort-crypto](https://github.com/Patart50/renfort-crypto). Toute convention de calcul est consignée dans [DECISIONS.md](DECISIONS.md).
 
@@ -59,24 +59,29 @@ Sur une position ouverte : « Simuler un ajout » au cours ou à un prix limite 
 
 ## 6. Prix, stockage, export
 
-- Cours courant : saisi, ou Binance en opt-in (renfort D-013 : liste complète des cours, la crypto n'est pas envoyée).
-- Stockage IndexedDB, sauvegarde JSON versionnée (`app`, `schemaVersion`), comme pmpa D-016 (D-004).
-- Export CSV (« ; », virgule décimale, BOM) des positions et des événements ; export JSON.
+- **Cours** (`src/lib/prices/quote.ts`, D-016) : saisi dans la fiche, ou « Mettre à jour les cours » via Binance en opt-in (une requête, la liste publique de tous les cours ; renfort D-013). Cours dans la devise de la position : paire directe, inverse, EUR par les chemins de pmpa, USDT ↔ USDC, repli par BTC. Arrondi comme pmpa D-030 ; chemin affiché sous le champ.
+- **Stockage** : positions dans IndexedDB (`src/lib/storage/db.ts`, D-004), repli en mémoire signalé ; réglages et cours dans le localStorage (`commun-crypto/storage`, préfixe `carnet-crypto:`, D-014).
+- **Sauvegarde JSON** (`src/lib/storage/backup.ts`, D-015) : `app`, `schemaVersion` 1, positions et réglages ; validation stricte (structure invalide → rien n'est importé), positions incohérentes importées et signalées ; import en fusion (par identifiant) ou en remplacement.
+- **Exports pour tableur** (`src/lib/export/csv.ts`) : événements et positions, « ; », virgule décimale, BOM (comme dca D-015).
 
 ## 7. Interface (J2)
 
-- **Positions** : liste ouvertes + fermées, filtres (ouvertes, fermées, Long, Short, crypto, devise, émotion).
-- **Fiche position** : chiffres clés, fil des événements, ajout/réduction/clôture, simulateur de renfort.
-- **Résumé** : statistiques par devise.
-- Émotions : liste proposée (FOMO, peur, discipline, revanche, ennui, conviction…), facultative, modifiable.
-- Réglages : interrupteur PMP brut / frais inclus, thème, consentement Binance.
-- À propos et limites, auteur et soutien, hors ligne, WCAG 2 AA.
+Navigation par ancre : `#positions` (défaut), `#nouvelle`, `#position/<id>`, `#resume`. Focus sur le titre à chaque changement d'écran. État : `src/lib/state/app.svelte.ts` ; toute écriture passe par le moteur, une suite invalide est refusée avec son message (D-017).
+
+- **Accueil** (carnet vide) : présentation, « Ouvrir une position », « Charger un exemple ».
+- **Positions** (`PositionList.svelte`) : cartes cliquables (actif/devise, sens, statut, quantité, prix moyen, réalisé net, latent net, durée), filtres statut, sens, crypto, devise, émotion ; « Mettre à jour les cours (Binance) » avec encart de consentement.
+- **Ouvrir une position** (`NewPosition.svelte`) : crypto, devise de cotation (USDT, USDC, EUR, BTC proposés), sens, ouverture (date et heure, quantité, prix, frais, émotion, note), note de position.
+- **Fiche** (`PositionDetail.svelte`) : chiffres clés (quantité, prix moyen selon le réglage et l'autre en rappel, break-even, latent, réalisé, total, frais, capital engagé max), cours actuel modifiable, Ajouter / Réduire (raccourcis 25-50-75 %) / Clôturer (`EventForm.svelte`), fil des événements avec modification et suppression de chaque événement, événements bloqués par une erreur signalés avec « Corriger », modification et suppression de la position.
+- **Simulateur** (`Simulator.svelte`, D-008, D-012) : « Viser un prix moyen » ou « Ajouter une quantité », prix d'achat (cours par défaut) et frais ; quantité, montant, frais, prix moyen, break-even et capital engagé avant → après ; cible atteinte ou inatteignable (prix limite) ; lien « Analyse complète dans renfort-crypto » pour une position Long en euros.
+- **Résumé** (`Summary.svelte`) : par devise, réalisé et latent nets, espérance, winrate, profit factor, gain et perte moyens, meilleure et pire position, frais ; avertissement si winrate ≥ 50 % avec espérance négative ; tableau par émotion à l'ouverture (D-018).
+- **Réglages et sauvegarde** (`Settings.svelte`) : prix moyen affiché (D-003), frais de sortie estimés, retrait de l'autorisation Binance, export et import JSON, exports CSV, effacement.
+- Thème, hors ligne, 375 px sans débordement, WCAG 2 AA vérifié avec axe-core.
 
 ## 8. Jalons
 
 - **J0** ✅ commun-crypto v1.0.0 puis v1.1.0 (Short).
 - **J1** ✅ Squelette, moteur d'événements (Long/Short), calculs, statistiques, simulateur de renfort, tests ; CI et page d'attente avec aperçu du moteur.
-- **J2** Interface complète.
+- **J2** ✅ Interface complète, IndexedDB, sauvegarde, exports, cours du jour.
 - **J3** v1.0 : À propos et limites, hors ligne vérifié, accessibilité.
 
 ## 9. Hors périmètre v1.0
