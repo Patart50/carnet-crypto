@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * Carnet de trades (J2). Navigation par ancre :
-   * #positions (défaut), #nouvelle, #position/<id>, #resume.
+   * #positions (défaut), #nouvelle, #position/<id>, #resume, #a-propos.
    */
   import { onMount, tick } from 'svelte';
   import ThemeToggle from 'commun-crypto/ui/ThemeToggle.svelte';
@@ -15,12 +15,14 @@
   import NewPosition from './lib/ui/NewPosition.svelte';
   import Summary from './lib/ui/Summary.svelte';
   import Settings from './lib/ui/Settings.svelte';
+  import About from './lib/ui/About.svelte';
 
-  type View = { name: 'positions' } | { name: 'nouvelle' } | { name: 'resume' } | { name: 'position'; id: string };
+  type View = { name: 'positions' } | { name: 'nouvelle' } | { name: 'resume' } | { name: 'a-propos' } | { name: 'position'; id: string };
 
   function readView(hash = location.hash): View {
     if (hash === '#nouvelle') return { name: 'nouvelle' };
     if (hash === '#resume') return { name: 'resume' };
+    if (hash === '#a-propos') return { name: 'a-propos' };
     const m = /^#position\/([\w-]{1,100})$/.exec(hash);
     if (m) return { name: 'position', id: m[1] };
     return { name: 'positions' };
@@ -30,7 +32,13 @@
   let settings: Settings;
 
   onMount(() => {
-    void app.init();
+    void app.init().then(async () => {
+      // Ouverture directe sur la page À propos : focus sur son titre (lecteurs d'écran).
+      if (view.name === 'a-propos') {
+        await tick();
+        document.getElementById('about-title')?.focus();
+      }
+    });
     const onHash = async () => {
       view = readView();
       scrollTo(0, 0);
@@ -49,7 +57,7 @@
     location.hash = `#position/${id}`;
   }
 
-  const tab = $derived(view.name === 'resume' ? 'resume' : 'positions');
+  const tab = $derived(view.name === 'resume' ? 'resume' : view.name === 'a-propos' ? null : 'positions');
 </script>
 
 <a class="skip" href="#contenu">Aller au contenu</a>
@@ -99,6 +107,8 @@
     <PositionDetail id={view.id} />
   {:else if view.name === 'resume'}
     <Summary />
+  {:else if view.name === 'a-propos'}
+    <About />
   {:else if app.positions.length === 0}
     <section class="welcome" aria-labelledby="welcome-title">
       <h1 id="welcome-title" tabindex="-1">Un carnet de trades honnête, qui reste chez vous</h1>
@@ -110,7 +120,7 @@
         <a class="btn btn-primary" href="#nouvelle">Ouvrir une position</a>
         <button class="btn" type="button" onclick={example}>Charger un exemple</button>
       </div>
-      <p class="muted small">Aucun compte, aucune donnée envoyée : tout reste dans ce navigateur. Pensez à exporter une sauvegarde (menu Réglages).</p>
+      <p class="muted small">Aucun compte, aucune donnée envoyée : tout reste dans ce navigateur. Pensez à exporter une sauvegarde (menu Réglages). Méthode et limites : <a href="#a-propos">À propos</a>.</p>
     </section>
   {:else}
     <PositionList />
@@ -121,7 +131,8 @@
   <p>
     Outil de suivi, pas un conseil en investissement. Pour la fiscalité (plus-values, formulaire 2086), voir
     <a href="https://patart50.github.io/pmpa-crypto/" target="_blank" rel="noopener">pmpa-crypto</a>. Code source libre (AGPL-3.0) sur
-    <a href="https://github.com/Patart50/carnet-crypto" rel="noopener" target="_blank">GitHub</a> · v{__APP_VERSION__}
+    <a href="https://github.com/Patart50/carnet-crypto" rel="noopener" target="_blank">GitHub</a> ·
+    <a href="#a-propos">À propos et limites</a> · v{__APP_VERSION__}
   </p>
   <p class="credit">
     Créé par <a href={AUTHOR.url} target="_blank" rel="noopener author">{AUTHOR.name} ({AUTHOR.handle})</a> · <Support intro={SUPPORT_INTRO} />

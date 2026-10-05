@@ -1,5 +1,12 @@
 # Notes de version
 
+## 1.0.0 — Première version stable
+
+- Page « À propos et limites » : ce que fait l'outil, vos données, méthode et formules, limites connues, avertissement, contribuer, auteur et soutien.
+- Messages en français jusque dans les nombres (« 0,07 »).
+- Hors ligne vérifié : après une première visite, le carnet, la page À propos et les polices s'ouvrent sans réseau.
+- Accessibilité : WCAG 2 AA vérifié avec axe-core sur tous les écrans, en clair et en sombre, sur bureau et à 375 px.
+
 ## 0.2.0 — Interface
 
 - Positions : cartes avec prix moyen, réalisé et latent nets, durée ; filtres statut, sens, crypto, devise, émotion.
