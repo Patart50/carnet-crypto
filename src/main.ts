@@ -1,5 +1,6 @@
 import { mount } from 'svelte';
 import 'commun-crypto/theme.css';
+import './lib/ui/forms.css';
 import App from './App.svelte';
 
 const app = mount(App, {

@@ -65,7 +65,17 @@
             {#if s.worst}<a href={`#position/${s.worst.positionId}`}>{s.worst.asset} {amountSigned(s.worst.net, s.quote)}</a>{:else}—{/if}
           </dd>
         </div>
-        <div><dt>Frais payés</dt><dd>{amount(s.feesTotal, s.quote)}</dd></div>
+        <div>
+          <dt>Frais payés</dt>
+          <dd>{amount(s.feesTotal, s.quote)}</dd>
+        </div>
+        {#if !s.fundingTotal.isZero()}
+          <div>
+            <dt>Funding et intérêts</dt>
+            <dd class:loss={s.fundingTotal.gt(0)} class:gain={s.fundingTotal.lt(0)}>{amountSigned(s.fundingTotal.neg(), s.quote)}</dd>
+            <dd class="sub">{s.fundingTotal.gt(0) ? 'payés' : 'reçus'}, inclus dans le réalisé</dd>
+          </div>
+        {/if}
       </dl>
       {#if s.winrate && s.expectancy && s.winrate.gte(50) && s.expectancy.lt(0)}
         <p class="notice"><strong>À noter :</strong>&nbsp;plus de la moitié des trades sont gagnants, mais l'espérance est négative : les pertes pèsent plus que les gains.</p>

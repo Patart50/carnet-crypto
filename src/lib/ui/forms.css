@@ -1,0 +1,18 @@
+/*
+ * Alignement des formulaires (carnet D-025) : un champ n'est jamais étiré par la
+ * hauteur de ses voisins (texte d'aide, erreur) et tous les champs d'une ligne ont
+ * la même hauteur, champ date compris.
+ */
+.field {
+  align-content: start;
+}
+input:not([type='radio']):not([type='checkbox']):not([type='file']),
+select {
+  height: 2.5rem;
+}
+input[type='datetime-local'] {
+  padding-block: 0;
+}
+.field > small {
+  line-height: 1.35;
+}

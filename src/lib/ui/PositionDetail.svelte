@@ -9,6 +9,7 @@
   import { priceKey } from '../core/stats';
   import EventForm from './EventForm.svelte';
   import Simulator from './Simulator.svelte';
+  import Combobox from './Combobox.svelte';
   import { dateTimeFr, durationLabel, priceIn } from './format';
 
   let { id }: { id: string } = $props();
@@ -126,8 +127,8 @@
     {#if editMeta}
       <form class="panel meta" onsubmit={saveMeta} novalidate aria-label="Modifier la position">
         <div class="grid">
-          <label class="field"><span>Crypto</span><input bind:value={mAsset} maxlength="20" /></label>
-          <label class="field"><span>Devise</span><input bind:value={mQuote} maxlength="10" /></label>
+          <div class="field"><label for="meta-asset">Crypto</label><Combobox id="meta-asset" bind:value={mAsset} options={app.assetOptions} /></div>
+          <div class="field"><label for="meta-quote">Devise</label><Combobox id="meta-quote" bind:value={mQuote} options={app.quoteOptions} maxlength={10} /></div>
           <label class="field"><span>Sens</span>
             <select bind:value={mSide}><option value="long">Long</option><option value="short">Short</option></select>
           </label>
@@ -161,6 +162,13 @@
         <div><dt>Total net</dt><dd class:gain={total.gt(0)} class:loss={total.lt(0)}>{amountSigned(total, q)}</dd></div>
       {/if}
       <div><dt>Frais payés</dt><dd>{amount(st.feesTotal, q)}</dd></div>
+      {#if !st.fundingTotal.isZero()}
+        <div>
+          <dt>Funding et intérêts</dt>
+          <dd class:loss={st.fundingTotal.gt(0)} class:gain={st.fundingTotal.lt(0)}>{amountSigned(st.fundingTotal.neg(), q)}</dd>
+          <dd class="sub">{st.fundingTotal.gt(0) ? 'payés' : 'reçus'}, inclus dans le réalisé</dd>
+        </div>
+      {/if}
       <div><dt>Capital engagé max</dt><dd>{amount(st.maxCost, q)}</dd></div>
     </dl>
 
@@ -207,6 +215,7 @@
             <p class="facts">
               {qty(r ? r.quantity : dec(e.quantity ?? '0'))} {position.asset} à {priceIn(dec(e.price), q)}
               {#if e.fee !== '0'}· frais {amount(dec(e.fee), q)}{/if}
+              {#if e.funding}· funding {dec(e.funding).isNeg() ? 'reçu' : 'payé'} {amount(dec(e.funding).abs(), q)}{/if}
               · prix moyen {priceIn(step.pmpGross, q)}
               {#if r}· <span class:gain={r.net.gt(0)} class:loss={r.net.lt(0)}>P&amp;L net {amountSigned(r.net, q)}</span>{/if}
             </p>
@@ -317,6 +326,11 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
     gap: 0.7rem;
+    align-items: start;
+  }
+  .meta .field > label {
+    font-size: 0.85rem;
+    font-weight: 550;
   }
   .actions {
     display: flex;

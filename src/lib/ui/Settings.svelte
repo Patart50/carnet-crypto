@@ -7,34 +7,114 @@
   import { rateToPercent } from './format';
 
   let dialog: HTMLDialogElement;
-  let feeText = $state('');
-  let feeError = $state<string | null>(null);
+  let entryText = $state('');
+  let exitText = $state('');
+  let entryError = $state<string | null>(null);
+  let exitError = $state<string | null>(null);
+  let dragging = $state(false);
   let preview = $state<ReadResult | null>(null);
   let importError = $state<string | null>(null);
   let fileInput: HTMLInputElement;
 
   export function open() {
-    feeText = rateToPercent(app.settings.exitFeeRate);
-    feeError = null;
+    entryText = rateToPercent(app.settings.entryFeeRate);
+    exitText = rateToPercent(app.settings.exitFeeRate);
+    entryError = exitError = null;
     preview = null;
     importError = null;
     dialog.showModal();
   }
 
-  function saveFee() {
+  /** Pourcentage saisi → fraction ; null si invalide. Vide = 0. */
+  function readRate(text: string): string | null {
     try {
-      const v = parseNumber(feeText) ?? null;
-      if (v === null) {
-        app.setExitFeeRate('0');
-        feeError = null;
-        return;
-      }
-      if (v.isNeg() || v.gte(100)) throw new RangeError();
-      app.setExitFeeRate(v.div(100).toFixed());
-      feeError = null;
+      const v = parseNumber(text);
+      if (v === null) return '0';
+      if (v.isNeg() || v.gte(100)) return null;
+      return v.div(100).toFixed();
     } catch {
-      feeError = 'Entre 0 et 100 %.';
+      return null;
     }
+  }
+
+  function saveEntry() {
+    const r = readRate(entryText);
+    entryError = r === null ? 'Entre 0 et 100 %.' : null;
+    if (r !== null) app.setEntryFeeRate(r);
+  }
+
+  function saveExit() {
+    const r = readRate(exitText);
+    exitError = r === null ? 'Entre 0 et 100 %.' : null;
+    if (r !== null) app.setExitFeeRate(r);
+  }
+
+  // ---- Sauvegarde (D-026) ----
+  // Chrome et Edge : sélecteur de fichiers qui rouvre le dernier dossier utilisé pour
+  // les sauvegardes (même identifiant à l'export et à l'import). Ailleurs : téléchargement
+  // et sélecteur classique filtré sur .json.
+  type Picker = { id?: string; startIn?: string; suggestedName?: string; types?: { description: string; accept: Record<string, string[]> }[] };
+  type FsWindow = Window & {
+    showSaveFilePicker?: (o: Picker) => Promise<{ createWritable(): Promise<{ write(d: string): Promise<void>; close(): Promise<void> }> }>;
+    showOpenFilePicker?: (o: Picker & { multiple?: boolean }) => Promise<{ getFile(): Promise<File> }[]>;
+  };
+  const PICKER_ID = 'carnet-crypto-sauvegardes';
+  const JSON_TYPES = [{ description: 'Sauvegarde carnet-crypto', accept: { 'application/json': ['.json'] } }];
+  const fs = window as FsWindow;
+  const isAbort = (e: unknown) => e instanceof DOMException && e.name === 'AbortError';
+
+  async function exportBackup() {
+    const name = `carnet-crypto-${stamp()}.json`;
+    const content = app.backupJson();
+    if (fs.showSaveFilePicker) {
+      try {
+        const handle = await fs.showSaveFilePicker({ id: PICKER_ID, startIn: 'documents', suggestedName: name, types: JSON_TYPES });
+        const w = await handle.createWritable();
+        await w.write(content);
+        await w.close();
+        app.notify('Sauvegarde enregistrée.');
+        return;
+      } catch (e) {
+        if (isAbort(e)) return;
+        // refus du navigateur : repli sur le téléchargement
+      }
+    }
+    download(name, content, 'application/json');
+  }
+
+  async function chooseBackup() {
+    if (fs.showOpenFilePicker) {
+      try {
+        const [handle] = await fs.showOpenFilePicker({ id: PICKER_ID, startIn: 'documents', types: JSON_TYPES, multiple: false });
+        await readText(await handle.getFile());
+        return;
+      } catch (e) {
+        if (isAbort(e)) return;
+      }
+    }
+    fileInput.click();
+  }
+
+  async function readText(file: File) {
+    importError = null;
+    preview = null;
+    if (file.size > 20 * 1024 * 1024) {
+      importError = 'Fichier trop gros pour une sauvegarde du carnet.';
+      return;
+    }
+    try {
+      preview = app.previewBackup(await file.text());
+      previewName = file.name;
+    } catch (e) {
+      importError = e instanceof BackupError ? e.message : 'Fichier illisible.';
+    }
+  }
+
+  function onDrop(e: DragEvent) {
+    e.preventDefault();
+    dragging = false;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) void readText(file);
   }
 
   function download(name: string, content: string, type: string) {
@@ -50,16 +130,11 @@
 
   const stamp = () => new Date().toISOString().slice(0, 10);
 
+  let previewName = $state('');
+
   async function readFile(event: Event) {
-    importError = null;
-    preview = null;
     const file = (event.currentTarget as HTMLInputElement).files?.[0];
-    if (!file) return;
-    try {
-      preview = app.previewBackup(await file.text());
-    } catch (e) {
-      importError = e instanceof BackupError ? e.message : 'Fichier illisible.';
-    }
+    if (file) await readText(file);
     fileInput.value = '';
   }
 
@@ -97,11 +172,34 @@
       <small>P&amp;L net et break-even incluent toujours les frais, quel que soit ce choix.</small>
     </fieldset>
 
-    <label class="field">
-      <span>Frais de sortie estimés (%)</span>
-      <input inputmode="decimal" autocomplete="off" bind:value={feeText} onchange={saveFee} aria-invalid={!!feeError} aria-describedby="exit-help" />
-      <small id="exit-help" class:error={!!feeError}>{feeError ?? 'Déduits du latent et pris en compte dans le break-even. Vide : 0.'}</small>
-    </label>
+    <div class="block">
+      <h3>Frais par défaut</h3>
+      <div class="two">
+        <label class="field">
+          <span>Entrée (%)</span>
+          <input inputmode="decimal" autocomplete="off" bind:value={entryText} onchange={saveEntry} aria-invalid={!!entryError} aria-describedby="entry-help" />
+          <small id="entry-help" class:error={!!entryError}>{entryError ?? 'Ouverture et ajout.'}</small>
+        </label>
+        <label class="field">
+          <span>Sortie (%)</span>
+          <input inputmode="decimal" autocomplete="off" bind:value={exitText} onchange={saveExit} aria-invalid={!!exitError} aria-describedby="exit-help" />
+          <small id="exit-help" class:error={!!exitError}>{exitError ?? 'Réduction et clôture.'}</small>
+        </label>
+      </div>
+      <small>Pré-remplissent le champ Frais (modifiable). La sortie sert aussi au latent et au break-even. Binance Spot : 0,1 % ; Futures : environ 0,02 % et 0,05 %.</small>
+    </div>
+
+    {#if app.memory.assets.length > 0}
+      <div class="block">
+        <h3>Cryptos mémorisées</h3>
+        <ul class="chips">
+          {#each app.memory.assets as a (a)}
+            <li>{a} <button class="btn btn-quiet btn-small" type="button" onclick={() => app.forgetAsset(a)} aria-label={`Retirer ${a} de la liste`}>×</button></li>
+          {/each}
+        </ul>
+        <small>Proposées en premier dans la liste Crypto. Les principales restent toujours proposées.</small>
+      </div>
+    {/if}
 
     <div class="block">
       <h3>Cours Binance</h3>
@@ -117,14 +215,19 @@
       <h3>Sauvegarde</h3>
       <p class="small muted">Vos données ne sont que sur cet appareil{app.persistent ? '' : ' (et en mémoire seulement : elles seront perdues à la fermeture)'}. Exportez une sauvegarde régulièrement.</p>
       <div class="actions">
-        <button class="btn btn-small" type="button" onclick={() => download(`carnet-crypto-${stamp()}.json`, app.backupJson(), 'application/json')} disabled={app.positions.length === 0}>Exporter la sauvegarde (JSON)</button>
-        <button class="btn btn-small" type="button" onclick={() => fileInput.click()}>Importer une sauvegarde…</button>
+        <button class="btn btn-small" type="button" onclick={exportBackup} disabled={app.positions.length === 0}>Exporter la sauvegarde (JSON)</button>
+        <button class="btn btn-small" type="button" onclick={chooseBackup}>Importer une sauvegarde…</button>
         <input bind:this={fileInput} type="file" accept=".json,application/json" class="sr-only" tabindex="-1" aria-hidden="true" onchange={readFile} />
       </div>
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="drop" class:dragging ondragover={(e) => { e.preventDefault(); dragging = true; }} ondragleave={() => (dragging = false)} ondrop={onDrop}>
+        ou glissez ici un fichier <code>carnet-crypto-….json</code>
+      </div>
+      <small>{fs.showOpenFilePicker ? "L'import rouvre le dossier de la dernière sauvegarde." : 'Le navigateur ne permet pas de filtrer les fichiers par nom : cherchez « carnet-crypto ».'}</small>
       {#if importError}<p class="error small" role="alert">{importError}</p>{/if}
       {#if preview}
         <div class="preview" role="region" aria-label="Aperçu de l'import">
-          <p class="small">{preview.positions.length} position{preview.positions.length > 1 ? 's' : ''} dans le fichier.</p>
+          <p class="small"><strong>{previewName}</strong> : {preview.positions.length} position{preview.positions.length > 1 ? 's' : ''}.</p>
           {#if preview.warnings.length}
             <p class="small warn">À corriger après import :</p>
             <ul class="small">{#each preview.warnings as w (w)}<li>{w}</li>{/each}</ul>
@@ -242,5 +345,43 @@
   }
   ul {
     margin: 0;
+  }
+  .two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    align-items: start;
+  }
+  .chips {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+  .chips li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding-left: 0.6rem;
+    font-size: 0.86rem;
+  }
+  .chips .btn {
+    padding: 0.1rem 0.45rem;
+  }
+  .drop {
+    border: 1px dashed var(--rule-strong);
+    border-radius: var(--radius);
+    padding: 0.7rem;
+    text-align: center;
+    font-size: 0.86rem;
+    color: var(--muted);
+  }
+  .drop.dragging {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--ink);
   }
 </style>

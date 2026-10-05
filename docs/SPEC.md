@@ -1,4 +1,4 @@
-# Spécification — carnet-crypto v1.0
+# Spécification — carnet-crypto v1.1
 
 Carnet de trades crypto, 100 % local, en français. Projet frère de [pmpa-crypto](https://github.com/Patart50/pmpa-crypto), [dca-crypto](https://github.com/Patart50/dca-crypto) et [renfort-crypto](https://github.com/Patart50/renfort-crypto). Toute convention de calcul est consignée dans [DECISIONS.md](DECISIONS.md).
 
@@ -14,6 +14,7 @@ Suivre proprement chaque position de son ouverture à sa clôture : prix moyen, 
 |---|---|---|
 | Ouverture | crypto, devise de cotation, sens (Long/Short), quantité, prix, frais, date, note, émotion | crée la position |
 | Ajout | quantité, prix, frais, date, note, émotion | recalcule le PMP |
+| *(sortie)* | funding et intérêts, signé (payé +, reçu −), facultatif | déduit du P&L net (D-022) |
 | Réduction | quantité (< quantité détenue), prix, frais, date, note, émotion | P&L réalisé sur la partie, PMP inchangé |
 | Clôture | prix, frais, date, note, émotion | réduction de toute la quantité, position fermée |
 
@@ -70,11 +71,12 @@ Navigation par ancre : `#positions` (défaut), `#nouvelle`, `#position/<id>`, `#
 
 - **Accueil** (carnet vide) : présentation, « Ouvrir une position », « Charger un exemple ».
 - **Positions** (`PositionList.svelte`) : cartes cliquables (actif/devise, sens, statut, quantité, prix moyen, réalisé net, latent net, durée), filtres statut, sens, crypto, devise, émotion ; « Mettre à jour les cours (Binance) » avec encart de consentement.
-- **Ouvrir une position** (`NewPosition.svelte`) : crypto, devise de cotation (USDT, USDC, EUR, BTC proposés), sens, ouverture (date et heure, quantité, prix, frais, émotion, note), note de position.
+- **Ouvrir une position** (`NewPosition.svelte`) : crypto et devise de cotation en listes déroulantes (`Combobox.svelte`, D-023 : liste complète à l'ouverture, filtrée seulement à la frappe, saisie libre ; cryptos mémorisées, puis utilisées, puis les 20 principales), sens, ouverture, note de position.
+- **Champs d'un événement** (`EventFields.svelte`) : date et heure, quantité, prix avec « Cours à cette date » (bougie d'une minute Binance après accord, D-024), frais calculés automatiquement depuis les taux d'entrée et de sortie des réglages (D-021, modifiables, « Recalculer »), funding et intérêts à la sortie (D-022), émotion en liste déroulante, note. Champs alignés (D-025).
 - **Fiche** (`PositionDetail.svelte`) : chiffres clés (quantité, prix moyen selon le réglage et l'autre en rappel, break-even, latent, réalisé, total, frais, capital engagé max), cours actuel modifiable, Ajouter / Réduire (raccourcis 25-50-75 %) / Clôturer (`EventForm.svelte`), fil des événements avec modification et suppression de chaque événement, événements bloqués par une erreur signalés avec « Corriger », modification et suppression de la position.
 - **Simulateur** (`Simulator.svelte`, D-008, D-012) : « Viser un prix moyen » ou « Ajouter une quantité », prix d'achat (cours par défaut) et frais ; quantité, montant, frais, prix moyen, break-even et capital engagé avant → après ; cible atteinte ou inatteignable (prix limite) ; lien « Analyse complète dans renfort-crypto » pour une position Long en euros.
 - **Résumé** (`Summary.svelte`) : par devise, réalisé et latent nets, espérance, winrate, profit factor, gain et perte moyens, meilleure et pire position, frais ; avertissement si winrate ≥ 50 % avec espérance négative ; tableau par émotion à l'ouverture (D-018).
-- **Réglages et sauvegarde** (`Settings.svelte`) : prix moyen affiché (D-003), frais de sortie estimés, retrait de l'autorisation Binance, export et import JSON, exports CSV, effacement.
+- **Réglages et sauvegarde** (`Settings.svelte`) : prix moyen affiché (D-003), frais d'entrée et de sortie par défaut (0,1 %), cryptos mémorisées (retrait), retrait de l'autorisation Binance, export et import JSON (sélecteur qui rouvre le dossier des sauvegardes sur Chrome et Edge, glisser-déposer partout, D-026), exports CSV, effacement.
 - **À propos et limites** (`About.svelte`, `#a-propos`, D-020) : ce que fait l'outil, vos données, méthode et formules, limites, avertissement, contribuer, auteur et soutien ; lien en pied de page et sur l'accueil.
 - Thème, hors ligne, 375 px sans débordement, lien d'évitement, WCAG 2 AA vérifié avec axe-core.
 

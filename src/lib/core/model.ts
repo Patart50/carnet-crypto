@@ -26,6 +26,11 @@ export interface TradeEvent {
   price: string;
   /** Frais de l'opération, en devise de cotation (« 0 » si aucun). */
   fee: string;
+  /**
+   * Funding, intérêts d'emprunt et autres coûts de détention, imputés à une
+   * sortie (réduction ou clôture). Signé : positif si payé, négatif si reçu (carnet D-022).
+   */
+  funding?: string;
   note?: string;
   emotion?: string;
 }

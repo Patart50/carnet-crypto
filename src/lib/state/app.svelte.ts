@@ -4,6 +4,7 @@
  * ne se rejoue pas est refusée avec le message du moteur (carnet D-002, D-011).
  */
 import { fetchTicker, PriceFetchError, roundPrice } from 'commun-crypto/binance';
+import { MinuteKlines } from 'commun-crypto/klines';
 import { dec, ZERO, type Dec } from 'commun-crypto/money';
 import { openLocalStore } from 'commun-crypto/storage';
 import { isTheme, type Theme } from 'commun-crypto/theme';
@@ -12,14 +13,18 @@ import type { Position, TradeEvent } from '../core/model';
 import { computePosition, type PositionState } from '../core/position';
 import type { PmpMode } from '../core/simulate';
 import { priceKey } from '../core/stats';
-import { priceIn } from '../prices/quote';
+import { priceAt, priceIn } from '../prices/quote';
+import { MAIN_CRYPTOS, MAIN_QUOTES, remember, suggestions } from '../core/lists';
+import { EMOTIONS } from '../core/model';
 import { makeBackup, mergePositions, readBackup, type ReadResult } from '../storage/backup';
 import { openPositionStore, type PositionStore } from '../storage/db';
 
 export interface Settings {
   theme: Theme;
   pmpMode: PmpMode;
-  /** Frais de sortie estimés, en fraction (0,001 = 0,1 %), pour le latent et le break-even. */
+  /** Frais d'entrée, en fraction (0,001 = 0,1 %) : pré-remplit les frais d'une ouverture ou d'un ajout (carnet D-021). */
+  entryFeeRate: string;
+  /** Frais de sortie, en fraction : pré-remplit les frais d'une sortie ; sert aussi au latent et au break-even. */
   exitFeeRate: string;
   allowPriceFetch: boolean;
 }
@@ -35,6 +40,14 @@ export interface SavedPrice {
 
 const SETTINGS_KEY = 'reglages';
 const PRICES_KEY = 'prix';
+const MEMORY_KEY = 'memoire';
+
+interface Memory {
+  assets: string[];
+  quotes: string[];
+}
+
+const RATE_RE = /^\d+(\.\d+)?$/;
 
 function newId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
@@ -56,7 +69,9 @@ class AppState {
   loaded = $state(false);
   persistent = $state(true);
   positions = $state<Position[]>([]);
-  settings = $state<Settings>({ theme: 'auto', pmpMode: 'gross', exitFeeRate: '0', allowPriceFetch: false });
+  settings = $state<Settings>({ theme: 'auto', pmpMode: 'gross', entryFeeRate: '0.001', exitFeeRate: '0.001', allowPriceFetch: false });
+  memory = $state<Memory>({ assets: [], quotes: [] });
+  private klines: MinuteKlines | null = null;
   prices = $state<Record<string, SavedPrice>>({});
   priceStatus = $state<'idle' | 'loading' | 'error'>('idle');
   priceMessage = $state<string | null>(null);
@@ -80,24 +95,27 @@ class AppState {
     ),
   );
 
-  exitFee = $derived.by<Dec>(() => {
-    try {
-      const d = dec(this.settings.exitFeeRate);
-      return d.isNeg() || d.gte(1) ? ZERO : d;
-    } catch {
-      return ZERO;
-    }
-  });
+  exitFee = $derived(rate(this.settings.exitFeeRate));
+  entryFee = $derived(rate(this.settings.entryFeeRate));
+
+  /** Cryptos proposées : mémoire, puis déjà utilisées, puis principales (carnet D-023). */
+  assetOptions = $derived(suggestions(this.memory.assets, this.positions.map((p) => p.asset), MAIN_CRYPTOS));
+  quoteOptions = $derived(suggestions(this.memory.quotes, this.positions.map((p) => p.quote), MAIN_QUOTES));
+  emotionOptions = $derived([...new Set([...EMOTIONS, ...this.positions.flatMap((p) => p.events.map((e) => e.emotion?.trim()).filter((e): e is string => !!e))])]);
 
   async init(factory?: IDBFactory | null) {
     const saved = this.local.readJson<Partial<Settings>>(SETTINGS_KEY);
     if (saved) {
       if (isTheme(saved.theme)) this.settings.theme = saved.theme;
       if (saved.pmpMode === 'gross' || saved.pmpMode === 'withFees') this.settings.pmpMode = saved.pmpMode;
-      if (typeof saved.exitFeeRate === 'string' && /^\d+(\.\d+)?$/.test(saved.exitFeeRate)) this.settings.exitFeeRate = saved.exitFeeRate;
+      if (typeof saved.entryFeeRate === 'string' && RATE_RE.test(saved.entryFeeRate)) this.settings.entryFeeRate = saved.entryFeeRate;
+      if (typeof saved.exitFeeRate === 'string' && RATE_RE.test(saved.exitFeeRate)) this.settings.exitFeeRate = saved.exitFeeRate;
       if (saved.allowPriceFetch === true) this.settings.allowPriceFetch = true;
     }
     this.prices = this.local.readJson<Record<string, SavedPrice>>(PRICES_KEY) ?? {};
+    const mem = this.local.readJson<Partial<Memory>>(MEMORY_KEY);
+    const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && /^[A-Z0-9]{1,20}$/.test(x)) : []);
+    this.memory = { assets: strings(mem?.assets), quotes: strings(mem?.quotes) };
     this.store = await openPositionStore(factory === undefined ? (globalThis.indexedDB ?? null) : factory);
     this.persistent = this.store.persistent;
     try {
@@ -125,6 +143,39 @@ class AppState {
   setExitFeeRate(rate: string) {
     this.settings.exitFeeRate = rate;
     this.saveSettings();
+  }
+
+  setEntryFeeRate(rate: string) {
+    this.settings.entryFeeRate = rate;
+    this.saveSettings();
+  }
+
+  /** Mémorise une crypto et une devise saisies (carnet D-023). */
+  rememberPair(asset: string, quote: string) {
+    this.memory = { assets: remember(this.memory.assets, asset), quotes: remember(this.memory.quotes, quote) };
+    this.local.writeJson(MEMORY_KEY, this.memory);
+  }
+
+  forgetAsset(asset: string) {
+    this.memory = { ...this.memory, assets: this.memory.assets.filter((a) => a !== asset) };
+    this.local.writeJson(MEMORY_KEY, this.memory);
+  }
+
+  /**
+   * Cours de clôture de la minute à une date (carnet D-024), après consentement.
+   * N'est envoyé que des noms de paires et l'heure.
+   */
+  async priceAtDate(asset: string, quote: string, local: string, fetcher?: ConstructorParameters<typeof MinuteKlines>[0]): Promise<{ price: Dec; route: string } | { error: string }> {
+    if (!this.settings.allowPriceFetch) return { error: 'Autorisation Binance nécessaire.' };
+    if (!this.klines || fetcher) this.klines = new MinuteKlines(fetcher);
+    try {
+      const q = await priceAt(this.klines, asset, quote, local);
+      if (!q) return { error: `Pas de cours Binance pour ${asset.toUpperCase()}/${quote.toUpperCase()} à cette date.` };
+      return { price: roundPrice(q.price), route: q.route };
+    } catch (e) {
+      if (e instanceof RangeError) return { error: 'Date invalide.' };
+      return { error: e instanceof PriceFetchError ? e.message : 'Impossible de joindre Binance.' };
+    }
   }
 
   setAllowPriceFetch(allow: boolean) {
@@ -163,6 +214,7 @@ class AppState {
       ...(meta.note?.trim() ? { note: meta.note.trim() } : {}),
     };
     const r = await this.commit(position);
+    if (r.ok) this.rememberPair(position.asset, position.quote);
     return r.ok ? { ok: true, id: position.id } : r;
   }
 
@@ -172,7 +224,9 @@ class AppState {
     const next: Position = { ...$state.snapshot(current), asset: meta.asset.trim().toUpperCase(), quote: meta.quote.trim().toUpperCase(), side: meta.side };
     if (meta.note?.trim()) next.note = meta.note.trim();
     else delete next.note;
-    return this.commit(next);
+    const r = await this.commit(next);
+    if (r.ok) this.rememberPair(next.asset, next.quote);
+    return r;
   }
 
   /** Ajoute (id absent) ou remplace (même id) un événement. */
@@ -183,6 +237,7 @@ class AppState {
     if (full.kind === 'close') delete full.quantity;
     if (!full.note?.trim()) delete full.note;
     if (!full.emotion?.trim()) delete full.emotion;
+    if (!full.funding || full.funding === '0' || full.kind === 'open' || full.kind === 'add') delete full.funding;
     const snapshot = $state.snapshot(current);
     const exists = snapshot.events.some((e) => e.id === full.id);
     const events = exists ? snapshot.events.map((e) => (e.id === full.id ? full : e)) : [...snapshot.events, full];
@@ -220,7 +275,11 @@ class AppState {
   }
 
   backupJson(): string {
-    return JSON.stringify(makeBackup($state.snapshot(this.positions), { pmpMode: this.settings.pmpMode, exitFeeRate: this.settings.exitFeeRate }), null, 2);
+    return JSON.stringify(
+      makeBackup($state.snapshot(this.positions), { pmpMode: this.settings.pmpMode, entryFeeRate: this.settings.entryFeeRate, exitFeeRate: this.settings.exitFeeRate }),
+      null,
+      2,
+    );
   }
 
   /** Lit une sauvegarde sans rien modifier (aperçu avant import). */
@@ -234,6 +293,7 @@ class AppState {
     this.positions = sortPositions(next);
     if (read.settings?.pmpMode) this.settings.pmpMode = read.settings.pmpMode;
     if (read.settings?.exitFeeRate) this.settings.exitFeeRate = read.settings.exitFeeRate;
+    if (read.settings?.entryFeeRate) this.settings.entryFeeRate = read.settings.entryFeeRate;
     this.saveSettings();
   }
 
@@ -284,6 +344,16 @@ class AppState {
       this.priceStatus = 'error';
       this.priceMessage = e instanceof PriceFetchError ? e.message : 'Impossible de récupérer les cours.';
     }
+  }
+}
+
+/** Taux en fraction, borné à [0, 1[ ; 0 si illisible. */
+function rate(raw: string): Dec {
+  try {
+    const d = dec(raw);
+    return d.isNeg() || d.gte(1) ? ZERO : d;
+  } catch {
+    return ZERO;
   }
 }
 

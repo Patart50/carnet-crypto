@@ -13,7 +13,7 @@ const frDec = (d: Dec | null | undefined) => (d ? d.toDecimalPlaces(8).toFixed()
 
 /** Une ligne par événement. */
 export function eventsCsv(positions: readonly Position[], states: ReadonlyMap<string, PositionState>): string {
-  const headers = ['Position', 'Actif', 'Devise', 'Sens', 'Date', 'Événement', 'Quantité', 'Prix', 'Frais', 'PMP brut après', 'P&L net réalisé', 'Émotion', 'Note'];
+  const headers = ['Position', 'Actif', 'Devise', 'Sens', 'Date', 'Événement', 'Quantité', 'Prix', 'Frais', 'Funding', 'PMP brut après', 'P&L net réalisé', 'Émotion', 'Note'];
   const rows: string[][] = [];
   for (const p of positions) {
     const st = states.get(p.id);
@@ -29,6 +29,7 @@ export function eventsCsv(positions: readonly Position[], states: ReadonlyMap<st
         e.kind === 'close' ? frDec(step.realization?.quantity) : frNum(e.quantity),
         frNum(e.price),
         frNum(e.fee),
+        frNum(e.funding),
         frDec(step.pmpGross),
         frDec(step.realization?.net),
         e.emotion ?? '',
@@ -41,7 +42,7 @@ export function eventsCsv(positions: readonly Position[], states: ReadonlyMap<st
 
 /** Une ligne par position. */
 export function positionsCsv(positions: readonly Position[], states: ReadonlyMap<string, PositionState>): string {
-  const headers = ['Position', 'Actif', 'Devise', 'Sens', 'Statut', 'Ouverture', 'Clôture', 'Quantité', 'PMP brut', 'PMP frais inclus', 'P&L net réalisé', 'Frais', 'Capital engagé max', 'Note'];
+  const headers = ['Position', 'Actif', 'Devise', 'Sens', 'Statut', 'Ouverture', 'Clôture', 'Quantité', 'PMP brut', 'PMP frais inclus', 'P&L net réalisé', 'Frais', 'Funding', 'Capital engagé max', 'Note'];
   const rows = positions.map((p) => {
     const st = states.get(p.id);
     return [
@@ -57,6 +58,7 @@ export function positionsCsv(positions: readonly Position[], states: ReadonlyMap
       frDec(st?.pmpWithFees),
       frDec(st?.realizedNet),
       frDec(st?.feesTotal),
+      frDec(st?.fundingTotal),
       frDec(st?.maxCost),
       p.note ?? '',
     ];

@@ -14,6 +14,7 @@ export const SCHEMA_VERSION = 1;
 
 export interface BackupSettings {
   pmpMode?: 'gross' | 'withFees';
+  entryFeeRate?: string;
   exitFeeRate?: string;
 }
 
@@ -78,6 +79,8 @@ function readEvent(v: unknown, where: string): TradeEvent {
     price: decimal(v.price, `${where}, prix`)!,
     fee: decimal(v.fee ?? '0', `${where}, frais`)!,
   };
+  const funding = decimal(v.funding, `${where}, funding`, true);
+  if (funding !== undefined && funding !== '0') event.funding = funding;
   const quantity = decimal(v.quantity, `${where}, quantité`, true);
   if (quantity !== undefined) event.quantity = quantity;
   const note = text(v.note, `${where}, note`, { optional: true });
@@ -137,6 +140,8 @@ export function readBackup(raw: string): ReadResult {
     if (data.settings.pmpMode === 'gross' || data.settings.pmpMode === 'withFees') settings.pmpMode = data.settings.pmpMode;
     const rate = decimal(data.settings.exitFeeRate, 'Réglages, frais de sortie', true);
     if (rate !== undefined) settings.exitFeeRate = rate;
+    const entry = decimal(data.settings.entryFeeRate, "Réglages, frais d'entrée", true);
+    if (entry !== undefined) settings.entryFeeRate = entry;
   }
   const warnings = positions
     .map((p) => ({ p, errors: computePosition(p).errors }))
