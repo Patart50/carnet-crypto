@@ -1,39 +1,55 @@
 <script lang="ts">
   /**
-   * Page d'attente (J1) : présentation et aperçu du moteur sur une position fictive.
-   * L'interface complète arrive en J2.
+   * Carnet de trades (J2). Navigation par ancre :
+   * #positions (défaut), #nouvelle, #position/<id>, #resume.
    */
+  import { onMount, tick } from 'svelte';
   import ThemeToggle from 'commun-crypto/ui/ThemeToggle.svelte';
   import Support from 'commun-crypto/ui/Support.svelte';
-  import { applyTheme, isTheme, type Theme } from 'commun-crypto/theme';
-  import { openLocalStore } from 'commun-crypto/storage';
+  import { applyTheme } from 'commun-crypto/theme';
   import { AUTHOR } from 'commun-crypto/support';
-  import { amount, amountSigned, dateFr, qty } from 'commun-crypto/format';
-  import { dec } from 'commun-crypto/money';
+  import { app } from './lib/state/app.svelte';
   import { SUPPORT_INTRO } from './lib/ui/supportIntro';
-  import { EXAMPLE } from './lib/core/example';
-  import { KIND_LABELS, SIDE_LABELS } from './lib/core/model';
-  import { breakEven, computePosition, latentNet } from './lib/core/position';
-  import { simulateTarget } from './lib/core/simulate';
+  import PositionList from './lib/ui/PositionList.svelte';
+  import PositionDetail from './lib/ui/PositionDetail.svelte';
+  import NewPosition from './lib/ui/NewPosition.svelte';
+  import Summary from './lib/ui/Summary.svelte';
+  import Settings from './lib/ui/Settings.svelte';
 
-  const store = openLocalStore('carnet-crypto:');
-  const saved = store.readJson<{ theme?: unknown }>('reglages');
-  let theme = $state<Theme>(isTheme(saved?.theme) ? saved.theme : 'auto');
+  type View = { name: 'positions' } | { name: 'nouvelle' } | { name: 'resume' } | { name: 'position'; id: string };
 
-  function setTheme(t: Theme) {
-    theme = t;
-    store.writeJson('reglages', { theme: t });
+  function readView(hash = location.hash): View {
+    if (hash === '#nouvelle') return { name: 'nouvelle' };
+    if (hash === '#resume') return { name: 'resume' };
+    const m = /^#position\/([\w-]{1,100})$/.exec(hash);
+    if (m) return { name: 'position', id: m[1] };
+    return { name: 'positions' };
   }
 
-  $effect(() => applyTheme(theme));
+  let view = $state<View>(readView());
+  let settings: Settings;
 
-  // Aperçu : la position fictive, rejouée par le moteur.
-  const quote = EXAMPLE.quote;
-  const st = computePosition(EXAMPLE);
-  const price = dec('63000');
-  const latent = latentNet(st, price);
-  const be = breakEven(st);
-  const target = simulateTarget(EXAMPLE, dec('55000'), { price: dec('50000'), feeRate: dec('0.001'), date: '2026-02-10T10:00' });
+  onMount(() => {
+    void app.init();
+    const onHash = async () => {
+      view = readView();
+      scrollTo(0, 0);
+      await tick();
+      document.querySelector<HTMLElement>('main h1')?.focus();
+    };
+    addEventListener('hashchange', onHash);
+    return () => removeEventListener('hashchange', onHash);
+  });
+
+  $effect(() => applyTheme(app.settings.theme));
+
+  async function example() {
+    const id = await app.loadExample();
+    app.notify('Exemple chargé : position fictive BTC/USDT.');
+    location.hash = `#position/${id}`;
+  }
+
+  const tab = $derived(view.name === 'resume' ? 'resume' : 'positions');
 </script>
 
 <a class="skip" href="#contenu">Aller au contenu</a>
@@ -41,7 +57,7 @@
 <header class="top">
   <div class="top-inner">
     <div class="brand">
-      <a class="brand-name" href="./" aria-label="carnet-crypto, accueil">carnet-crypto</a>
+      <a class="brand-name" href="#positions" aria-label="carnet-crypto, positions">carnet-crypto</a>
       <span class="brand-tag"
         ><span class="tagline">Carnet de trades ·&nbsp;</span>par
         <a href={AUTHOR.url} target="_blank" rel="noopener author">{AUTHOR.name} ({AUTHOR.handle})</a></span
@@ -52,74 +68,53 @@
         <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"
           ><path d="M8 1.5 2.5 3.8v3.7c0 3.2 2.3 6 5.5 7 3.2-1 5.5-3.8 5.5-7V3.8L8 1.5Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" /></svg
         >
-        100 % local
+        <span class="local-text">100 % local</span>
       </span>
-      <ThemeToggle {theme} onchange={setTheme} />
+      <button class="btn btn-quiet" type="button" onclick={() => settings.open()} aria-label="Réglages et sauvegarde" title="Réglages et sauvegarde">
+        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"
+          ><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /><circle cx="7" cy="5" r="1.8" fill="var(--surface)" stroke="currentColor" stroke-width="1.4" /><circle cx="13" cy="10" r="1.8" fill="var(--surface)" stroke="currentColor" stroke-width="1.4" /><circle cx="8" cy="15" r="1.8" fill="var(--surface)" stroke="currentColor" stroke-width="1.4" /></svg
+        >
+      </button>
+      <ThemeToggle theme={app.settings.theme} onchange={(t) => app.setTheme(t)} />
     </div>
   </div>
+  <nav class="tabs" aria-label="Sections">
+    <a href="#positions" aria-current={tab === 'positions' ? 'page' : undefined}>Positions</a>
+    <a href="#resume" aria-current={tab === 'resume' ? 'page' : undefined}>Résumé</a>
+  </nav>
 </header>
 
 <main id="contenu" tabindex="-1">
-  <section class="intro" aria-labelledby="titre">
-    <p class="badge">En construction</p>
-    <h1 id="titre">Un carnet de trades honnête, qui reste chez vous</h1>
-    <p>
-      Suivez chaque position, Long ou Short, de l'ouverture à la clôture : renforts, clôtures partielles, prix moyen pondéré, P&amp;L
-      réalisé et latent <strong>nets de frais</strong>, notes et émotions. Les statistiques ne montrent jamais le winrate seul : gain
-      moyen, perte moyenne, profit factor et espérance l'accompagnent.
+  {#if app.loaded && !app.persistent}
+    <p class="notice" role="status">
+      <strong>Stockage indisponible :</strong>&nbsp;le navigateur bloque l'enregistrement. Vos saisies seront perdues à la fermeture ; exportez une sauvegarde.
     </p>
-    <p class="muted">Aucun compte, aucune donnée envoyée : tout reste dans votre navigateur. L'interface complète arrive bientôt.</p>
-  </section>
+  {/if}
 
-  <section class="card" aria-labelledby="apercu">
-    <h2 id="apercu">Aperçu du moteur</h2>
-    <p class="muted small">
-      Position fictive : {SIDE_LABELS[EXAMPLE.side]} {EXAMPLE.asset}/{quote}, calculée en direct par le moteur du carnet.
-    </p>
-    <!-- Zone défilante sur petit écran : focusable pour le défilement au clavier (axe scrollable-region-focusable, motif WAI « region »). -->
-    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-    <div class="table-wrap" role="region" aria-label="Fil des événements" tabindex="0">
-      <table>
-        <caption class="sr-only">Fil des événements de la position fictive</caption>
-        <thead>
-          <tr>
-            <th scope="col">Date</th>
-            <th scope="col">Événement</th>
-            <th scope="col" class="num">Quantité</th>
-            <th scope="col" class="num">Prix</th>
-            <th scope="col" class="num">PMP après</th>
-            <th scope="col" class="num">P&amp;L net</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each st.steps as step (step.event.id)}
-            <tr>
-              <td>{dateFr(step.event.date)}</td>
-              <td>{KIND_LABELS[step.event.kind]}{#if step.event.emotion}<span class="tag">{step.event.emotion}</span>{/if}</td>
-              <td class="num">{qty(dec(step.event.quantity ?? '0'))}</td>
-              <td class="num">{amount(dec(step.event.price), quote)}</td>
-              <td class="num">{amount(step.pmpGross, quote)}</td>
-              <td class="num">{step.realization ? amountSigned(step.realization.net, quote) : '—'}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    </div>
-    <dl class="figures">
-      <div><dt>Quantité restante</dt><dd>{qty(st.quantity)} {EXAMPLE.asset}</dd></div>
-      <div><dt>Réalisé net</dt><dd class:gain={st.realizedNet.gt(0)}>{amountSigned(st.realizedNet, quote)}</dd></div>
-      <div><dt>Latent net à {amount(price, quote, 0)}</dt><dd class:gain={latent.gt(0)} class:loss={latent.lt(0)}>{amountSigned(latent, quote)}</dd></div>
-      <div><dt>Break-even</dt><dd>{be ? amount(be, quote) : '—'}</dd></div>
-      <div><dt>Frais payés</dt><dd>{amount(st.feesTotal, quote)}</dd></div>
-    </dl>
-    {#if target.status === 'ok'}
-      <p class="small">
-        Simulateur : pour ramener le PMP à {amount(dec('55000'), quote, 0)} en achetant à {amount(dec('50000'), quote, 0)}, il faudrait
-        ajouter {qty(target.simulation.quantity)} {EXAMPLE.asset}, soit {amount(target.simulation.notional, quote)}. Capital engagé :
-        {amount(target.simulation.engagedBefore, quote)} → {amount(target.simulation.engagedAfter, quote)}.
+  {#if !app.loaded}
+    <p class="muted">Chargement du carnet…</p>
+  {:else if view.name === 'nouvelle'}
+    <NewPosition />
+  {:else if view.name === 'position'}
+    <PositionDetail id={view.id} />
+  {:else if view.name === 'resume'}
+    <Summary />
+  {:else if app.positions.length === 0}
+    <section class="welcome" aria-labelledby="welcome-title">
+      <h1 id="welcome-title" tabindex="-1">Un carnet de trades honnête, qui reste chez vous</h1>
+      <p>
+        Suivez chaque position, Long ou Short, de l'ouverture à la clôture : renforts, clôtures partielles, prix moyen pondéré, P&amp;L réalisé
+        et latent <strong>nets de frais</strong>, notes et émotions. Les statistiques ne montrent jamais le winrate seul.
       </p>
-    {/if}
-  </section>
+      <div class="actions">
+        <a class="btn btn-primary" href="#nouvelle">Ouvrir une position</a>
+        <button class="btn" type="button" onclick={example}>Charger un exemple</button>
+      </div>
+      <p class="muted small">Aucun compte, aucune donnée envoyée : tout reste dans ce navigateur. Pensez à exporter une sauvegarde (menu Réglages).</p>
+    </section>
+  {:else}
+    <PositionList />
+  {/if}
 </main>
 
 <footer class="foot">
@@ -133,7 +128,17 @@
   </p>
 </footer>
 
+<Settings bind:this={settings} />
+
+{#if app.toast}
+  <div class="toast" role="status" aria-live="polite">{app.toast}</div>
+{/if}
+
 <style>
+  /* Liens présentés en boutons : pas de soulignement. */
+  :global(a.btn) {
+    text-decoration: none;
+  }
   .skip {
     position: absolute;
     left: 1rem;
@@ -156,6 +161,7 @@
     border-bottom: 1px solid var(--rule);
   }
   .top-inner,
+  .tabs,
   main,
   .foot {
     max-width: 60rem;
@@ -167,7 +173,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding-block: 0.9rem;
+    padding-block: 0.8rem 0.4rem;
   }
   .brand {
     display: grid;
@@ -188,7 +194,7 @@
   .top-actions {
     display: flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.2rem;
   }
   .local {
     display: inline-flex;
@@ -198,104 +204,51 @@
     color: var(--gain);
     padding-inline: 0.4rem;
   }
+  .tabs {
+    display: flex;
+    gap: 0.2rem;
+  }
+  .tabs a {
+    padding: 0.5rem 0.8rem;
+    text-decoration: none;
+    color: var(--muted);
+    font-weight: 550;
+    border-bottom: 2px solid transparent;
+  }
+  .tabs a[aria-current='page'] {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
   main {
-    padding-block: 2rem 3rem;
+    padding-block: 1.5rem 3rem;
     display: grid;
-    gap: 1.5rem;
+    gap: 1rem;
     min-width: 0;
   }
-  .intro {
+  .welcome {
     display: grid;
-    gap: 0.8rem;
+    gap: 0.9rem;
     max-width: 42rem;
+    padding-block: 1rem;
   }
-  .intro h1 {
+  .welcome h1 {
     font-size: 1.8rem;
     line-height: 1.2;
   }
-  .badge {
-    width: fit-content;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--warn);
-    background: var(--warn-bg);
-    padding: 0.15rem 0.55rem;
-    border-radius: 999px;
+  .welcome h1:focus {
+    outline: none;
   }
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    padding: 1.1rem;
-    display: grid;
-    gap: 0.8rem;
-    min-width: 0;
-  }
-  .card h2 {
-    font-size: 1.15rem;
-  }
-  .table-wrap {
-    overflow-x: auto;
-  }
-  .table-wrap:focus-visible {
-    outline: 2px solid var(--focus);
-    outline-offset: 2px;
-  }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.9rem;
-  }
-  th,
-  td {
-    text-align: left;
-    padding: 0.45rem 0.5rem;
-    border-bottom: 1px solid var(--rule);
-    white-space: nowrap;
-  }
-  th {
-    font-weight: 600;
-    color: var(--muted);
-    font-size: 0.8rem;
-  }
-  .num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-  }
-  .tag {
-    margin-left: 0.4rem;
-    font-size: 0.75rem;
-    color: var(--muted);
-    border: 1px solid var(--rule);
-    border-radius: 999px;
-    padding: 0 0.4rem;
-  }
-  .figures {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-    gap: 0.6rem 1rem;
-    margin: 0;
-  }
-  .figures dt {
-    font-size: 0.78rem;
-    color: var(--muted);
-  }
-  .figures dd {
-    margin: 0;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-  .gain {
-    color: var(--gain);
-  }
-  .loss {
-    color: var(--loss);
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
   }
   .small {
-    font-size: 0.88rem;
+    font-size: 0.86rem;
   }
   @media (max-width: 560px) {
-    .tagline {
+    .tagline,
+    .local-text {
       display: none;
     }
   }
@@ -310,5 +263,19 @@
   }
   .credit {
     margin-top: 0.4rem;
+  }
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 1.25rem;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--paper);
+    padding: 0.6rem 1rem;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-pop);
+    font-size: 0.92rem;
+    z-index: 50;
+    max-width: calc(100vw - 2rem);
   }
 </style>

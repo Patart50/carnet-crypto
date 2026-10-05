@@ -47,3 +47,21 @@ L'ajout simulé est ajouté comme un événement et rejoué par `computePosition
 ## D-013 ✅ Code commun : commun-crypto v1.1.0
 Dépendance git épinglée (`git+https://github.com/Patart50/commun-crypto.git#v1.1.0`, commun D-009) : décimal, formatage (montants en USDT), stockage local des réglages (préfixe `carnet-crypto:`), thème, soutien, formules Long/Short, service worker. Aucun code copié.
 
+## D-014 ✅ Réglages et cours dans le localStorage
+Les positions vont dans IndexedDB (D-004) ; les réglages (thème, prix moyen affiché, frais de sortie estimés, autorisation Binance) et les cours saisis ou récupérés, petits et indépendants des positions, restent dans le localStorage via `commun-crypto/storage` (préfixe `carnet-crypto:`). Un cours enregistré garde son chemin Binance et sa date.
+
+## D-015 ✅ Import : fusion ou remplacement
+Un fichier de sauvegarde est d'abord lu et validé, sans rien modifier ; l'aperçu indique le nombre de positions et celles à corriger. « Fusionner » remplace les positions de même identifiant et garde les autres ; « Remplacer tout » efface d'abord le carnet (confirmation). Les réglages du fichier (prix moyen affiché, frais de sortie) sont repris.
+
+## D-016 ✅ Cours dans la devise de la position
+La table Binance est lue directement dans la devise de cotation : paire directe (BTCUSDT), paire inverse, EUR par les chemins de pmpa (commun D-006), USDT ↔ USDC par USDCUSDT, repli par BTC. Pas de conversion vers l'euro pour une position en USDT : le carnet raisonne dans la devise du trade (D-007).
+
+## D-017 ✅ Écriture validée par le moteur
+L'interface ne contourne jamais le moteur : création, ajout, modification ou suppression d'un événement construisent la nouvelle suite, la rejouent, et l'enregistrent seulement si elle est valide ; sinon le message du moteur s'affiche sous le formulaire (ex. « Quantité supérieure à la quantité détenue (0,07). »). Supprimer l'ouverture d'une position qui a d'autres événements est donc refusé ; supprimer le seul événement supprime la position, après confirmation. Une position importée invalide reste affichée avec « À corriger » et ses événements bloqués.
+
+## D-018 ✅ Résultats par émotion à l'ouverture
+Le résumé regroupe les positions fermées par émotion notée à l'ouverture, par devise : nombre, winrate, réalisé net, de la plus coûteuse à la plus rentable. C'est la raison d'être du champ émotion : voir si le FOMO ou la revanche coûtent plus cher. Une position sans émotion est classée « Non renseignée ».
+
+## D-019 ✅ Simulateur : lien vers renfort-crypto limité au Long en euros
+renfort-crypto raisonne en euros et en Long. Le lien « Analyse complète » n'apparaît que pour une position Long cotée en EUR ; il transmet quantité, prix moyen frais inclus (convention de renfort D-002), cours, frais et cible par le fragment `#partage?…` (renfort D-014), jamais envoyé au serveur.
+
