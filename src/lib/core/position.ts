@@ -28,7 +28,9 @@ export interface Realization {
   exitFee: Dec;
   /** Part des frais d'entrée imputée à cette sortie. */
   entryFeeShare: Dec;
-  /** gross − exitFee − entryFeeShare. */
+  /** Funding et intérêts imputés à cette sortie (positif payé, négatif reçu). */
+  funding: Dec;
+  /** gross − exitFee − entryFeeShare − funding. */
   net: Dec;
 }
 
@@ -62,6 +64,8 @@ export interface PositionState {
   realizedGross: Dec;
   realizedNet: Dec;
   feesTotal: Dec;
+  /** Funding et intérêts cumulés (positif : payés). */
+  fundingTotal: Dec;
   /** Plus grande quantité détenue. */
   maxQuantity: Dec;
   /** Plus grand capital engagé (quantité × PMP brut). */
@@ -102,6 +106,7 @@ function empty(side: Side): PositionState {
     realizedGross: ZERO,
     realizedNet: ZERO,
     feesTotal: ZERO,
+    fundingTotal: ZERO,
     maxQuantity: ZERO,
     maxCost: ZERO,
     openedAt: null,
@@ -132,6 +137,9 @@ export function computePosition(position: Pick<Position, 'side' | 'events'>): Po
     if (!price || !price.gt(0)) return fail(e, 'Le prix doit être strictement positif.');
     const fee = readDec(e.fee === '' ? '0' : e.fee);
     if (!fee || fee.isNeg()) return fail(e, 'Les frais doivent être positifs ou nuls.');
+    const funding = e.funding === undefined || e.funding === '' ? ZERO : readDec(e.funding);
+    if (!funding) return fail(e, 'Funding illisible.');
+    if (!funding.isZero() && (e.kind === 'open' || e.kind === 'add')) return fail(e, 'Le funding se saisit sur une réduction ou une clôture.');
 
     if (st.status === 'closed') return fail(e, 'La position est déjà clôturée : ouvrez une nouvelle position.');
     if (st.status === 'empty' && e.kind !== 'open') return fail(e, 'Le premier événement doit être une ouverture.');
@@ -174,11 +182,13 @@ export function computePosition(position: Pick<Position, 'side' | 'events'>): Po
         gross,
         exitFee: fee,
         entryFeeShare: share,
-        net: gross.minus(fee).minus(share),
+        funding,
+        net: gross.minus(fee).minus(share).minus(funding),
       };
       st.realizations.push(realization);
       st.realizedGross = st.realizedGross.plus(gross);
       st.realizedNet = st.realizedNet.plus(realization.net);
+      st.fundingTotal = st.fundingTotal.plus(funding);
       st.entryFeesOpen = st.entryFeesOpen.minus(share);
       st.quantity = st.quantity.minus(quantity);
       st.cost = st.quantity.isZero() ? ZERO : st.pmpGross.mul(st.quantity);

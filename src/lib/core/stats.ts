@@ -44,6 +44,8 @@ export interface QuoteStats {
   /** Positions ouvertes sans cours : latent incomplet. */
   openWithoutPrice: number;
   feesTotal: Dec;
+  /** Funding et intérêts (positif : payés). */
+  fundingTotal: Dec;
 }
 
 export interface StatsOptions {
@@ -75,6 +77,7 @@ function blank(quote: string): QuoteStats {
     latentNet: ZERO,
     openWithoutPrice: 0,
     feesTotal: ZERO,
+    fundingTotal: ZERO,
   };
 }
 
@@ -92,6 +95,7 @@ export function computeStats(positions: readonly Position[], options: StatsOptio
     const s = acc.stats;
     s.realizedNet = s.realizedNet.plus(st.realizedNet);
     s.feesTotal = s.feesTotal.plus(st.feesTotal);
+    s.fundingTotal = s.fundingTotal.plus(st.fundingTotal);
 
     if (st.status === 'open') {
       s.open++;

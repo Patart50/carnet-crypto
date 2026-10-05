@@ -3,6 +3,7 @@
   import { app, nowLocal } from '../state/app.svelte';
   import type { Side } from '../core/model';
   import EventFields from './EventFields.svelte';
+  import Combobox from './Combobox.svelte';
   import { emptyEventForm, parseEventForm, type EventField } from './eventForm';
 
   let asset = $state('');
@@ -14,8 +15,6 @@
   let metaError = $state<string | null>(null);
   let formError = $state<string | null>(null);
   let saving = $state(false);
-
-  const QUOTES = ['USDT', 'USDC', 'EUR', 'BTC'];
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
@@ -45,16 +44,16 @@
 
   <form class="panel" onsubmit={submit} novalidate>
     <div class="grid">
-      <label class="field">
-        <span>Crypto</span>
-        <input autocomplete="off" autocapitalize="characters" placeholder="BTC" maxlength="20" bind:value={asset} aria-invalid={!!metaError && metaError.startsWith('Crypto')} />
-      </label>
-      <label class="field">
-        <span>Devise de cotation</span>
-        <input list="quotes" autocomplete="off" autocapitalize="characters" maxlength="10" bind:value={quote} aria-invalid={!!metaError && metaError.startsWith('Devise')} aria-describedby="quote-help" />
-        <datalist id="quotes">{#each QUOTES as q (q)}<option value={q}></option>{/each}</datalist>
-        <small id="quote-help">Les totaux sont faits par devise, jamais additionnés entre devises.</small>
-      </label>
+      <div class="field">
+        <label for="new-asset">Crypto</label>
+        <Combobox id="new-asset" bind:value={asset} options={app.assetOptions} placeholder="BTC" invalid={!!metaError && metaError.startsWith('Crypto')} describedby="asset-help" />
+        <small id="asset-help">Liste : vos cryptos, puis les principales.</small>
+      </div>
+      <div class="field">
+        <label for="new-quote">Devise de cotation</label>
+        <Combobox id="new-quote" bind:value={quote} options={app.quoteOptions} maxlength={10} invalid={!!metaError && metaError.startsWith('Devise')} describedby="quote-help" />
+        <small id="quote-help">Totaux par devise, jamais additionnés.</small>
+      </div>
       <fieldset class="field side">
         <legend>Sens</legend>
         <div class="seg">
@@ -69,8 +68,8 @@
     <EventFields bind:values {errors} quote={quote.toUpperCase()} asset={asset.toUpperCase()} idPrefix="new" />
 
     <label class="field">
-      <span>Note sur la position <span class="muted">(facultatif : plan, objectif, invalidation)</span></span>
-      <textarea rows="2" maxlength="2000" bind:value={positionNote}></textarea>
+      <span>Note sur la position</span>
+      <textarea rows="2" maxlength="2000" placeholder="Facultatif : plan, objectif, invalidation" bind:value={positionNote}></textarea>
     </label>
 
     {#if formError}<p class="error" role="alert">{formError}</p>{/if}
@@ -105,7 +104,12 @@
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-    gap: 0.75rem;
+    gap: 0.9rem 0.75rem;
+    align-items: start;
+  }
+  .field > label {
+    font-size: 0.85rem;
+    font-weight: 550;
   }
   fieldset {
     border: 0;
@@ -121,7 +125,8 @@
   .seg {
     display: flex;
     gap: 1rem;
-    padding-block: 0.45rem;
+    align-items: center;
+    height: 2.5rem;
   }
   .seg label {
     display: inline-flex;

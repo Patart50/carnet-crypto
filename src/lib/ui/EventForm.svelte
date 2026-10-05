@@ -21,8 +21,10 @@
 
   const kinds: EventKind[] = ['add', 'reduce', 'close'];
   const title = $derived(editing ? `Modifier : ${KIND_LABELS[editing.kind].toLowerCase()}` : KIND_LABELS[values.kind]);
-  // Quantité détenue avant l'événement modifié, ou actuelle.
-  const held = $derived(st.status === 'open' && values.kind === 'reduce' && !editing ? st.quantity.toString() : null);
+  // Quantité détenue : actuelle pour une nouvelle sortie ; pour une clôture modifiée, celle qu'elle a fermée.
+  const held = $derived(
+    editing ? (st.steps.find((s) => s.event.id === editing.id)?.realization?.quantity ?? null) : st.status === 'open' && (values.kind === 'reduce' || values.kind === 'close') ? st.quantity : null,
+  );
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
@@ -69,7 +71,7 @@
   {#if values.kind === 'close'}
     <p class="muted small">Clôture de toute la quantité restante ({st.quantity.toString().replace('.', ',')} {position.asset}).</p>
   {/if}
-  <EventFields bind:values {errors} quote={position.quote} asset={position.asset} {held} idPrefix="evt" />
+  <EventFields bind:values {errors} quote={position.quote} asset={position.asset} {held} idPrefix="evt" editing={!!editing} />
   {#if formError}<p class="error" role="alert">{formError}</p>{/if}
   <div class="actions">
     <button class="btn btn-primary" type="submit" disabled={saving}>{editing ? 'Enregistrer' : `Enregistrer ${values.kind === 'add' ? "l'ajout" : values.kind === 'reduce' ? 'la réduction' : 'la clôture'}`}</button>

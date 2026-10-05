@@ -1,5 +1,14 @@
 # Notes de version
 
+## 1.1.0 — Saisie plus rapide
+
+- Champs des formulaires alignés : plus de champs étirés par le texte d'aide de leurs voisins.
+- Listes déroulantes pour la crypto, la devise (aussi dans « Modifier ») et l'émotion : elles s'ouvrent complètes et ne se filtrent que lorsque vous tapez. Les cryptos saisies sont mémorisées et proposées en premier, avant les 20 principales.
+- « Cours à cette date » : le prix d'exécution est proposé à partir du cours Binance de la minute (avec votre accord), à l'ouverture comme pour les ajouts, réductions et clôtures.
+- Frais calculés automatiquement depuis les taux d'entrée et de sortie des réglages (0,1 % par défaut), modifiables.
+- Funding et intérêts à la sortie, payés ou reçus : déduits du P&L, affichés à part.
+- Sauvegarde : sur Chrome et Edge, l'import rouvre le dossier de la dernière sauvegarde ; glisser-déposer d'un fichier partout.
+
 ## 1.0.0 — Première version stable
 
 - Page « À propos et limites » : ce que fait l'outil, vos données, méthode et formules, limites connues, avertissement, contribuer, auteur et soutien.

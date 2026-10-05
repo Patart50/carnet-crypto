@@ -146,3 +146,22 @@ describe('Validation (carnet D-005)', () => {
     expect(s(st.quantity)).toBe('0.3');
   });
 });
+
+describe('Funding et intérêts (carnet D-022)', () => {
+  it('payé : déduit du P&L net ; reçu (négatif) : ajouté', () => {
+    const paid = computePosition(pos('long', [ev('open', '2026-07-01T10:00', '1', '100'), { ...ev('close', '2026-07-02T10:00', undefined, '110', '1'), funding: '2.5' }]));
+    expect(s(paid.realizedNet)).toBe('6.5');
+    expect(s(paid.fundingTotal)).toBe('2.5');
+    expect(s(paid.realizations[0].funding)).toBe('2.5');
+    expect(s(paid.feesTotal)).toBe('1');
+    const received = computePosition(pos('short', [ev('open', '2026-07-01T10:00', '1', '100'), { ...ev('reduce', '2026-07-02T10:00', '0.5', '100'), funding: '-0.4' }]));
+    expect(s(received.realizedNet)).toBe('0.4');
+    expect(s(received.fundingTotal)).toBe('-0.4');
+  });
+
+  it('refusé sur une entrée, illisible refusé, vide = 0', () => {
+    expect(computePosition(pos('long', [{ ...ev('open', '2026-07-01T10:00', '1', '100'), funding: '1' }])).errors[0].message).toMatch(/réduction ou une clôture/);
+    expect(computePosition(pos('long', [ev('open', '2026-07-01T10:00', '1', '100'), { ...ev('close', '2026-07-02T10:00', undefined, '100'), funding: 'x' }])).errors[0].message).toMatch(/Funding/);
+    expect(computePosition(pos('long', [{ ...ev('open', '2026-07-01T10:00', '1', '100'), funding: '' }])).errors).toEqual([]);
+  });
+});

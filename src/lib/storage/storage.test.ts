@@ -64,6 +64,12 @@ describe('sauvegarde JSON', () => {
     expect(r.warnings[0]).toMatch(/ETH\/USDT : Le premier événement doit être une ouverture/);
   });
 
+  it('funding signé conservé, ancienne sauvegarde sans funding lisible', () => {
+    const withFunding = { ...other, id: 'f', events: [...other.events, { id: 'c', kind: 'close' as const, date: '2026-03-02T10:00', price: '2900', fee: '1', funding: '-1.5' }] };
+    expect(readBackup(JSON.stringify(makeBackup([withFunding]))).positions[0].events[1].funding).toBe('-1.5');
+    expect(readBackup(JSON.stringify(makeBackup([other]))).positions[0].events[0].funding).toBeUndefined();
+  });
+
   it('fusion par identifiant', () => {
     const changed = { ...EXAMPLE, note: 'modifiée' };
     expect(mergePositions([EXAMPLE, other], [changed]).map((p) => p.note ?? p.id)).toEqual(['modifiée', 'autre']);
